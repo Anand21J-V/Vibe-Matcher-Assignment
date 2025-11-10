@@ -2,8 +2,8 @@
 src/embedder.py
 
 Handles text embedding generation for product descriptions and user queries.
-Uses the free SentenceTransformer model "all-MiniLM-L6-v2" (offline, no API required)
-and supports caching embeddings locally to speed up repeated runs.
+Uses the free SentenceTransformer model "all-mpnet-base-v2" (offline, high-quality)
+and supports caching + L2 normalization for improved similarity scoring.
 """
 
 import os
@@ -11,12 +11,14 @@ import json
 from pathlib import Path
 from typing import List
 import pandas as pd
+import numpy as np
 from sentence_transformers import SentenceTransformer
+from sklearn.preprocessing import normalize
 
 # Initialize local embedding model
 # (This will download the model the first time you run it)
-print("Loading local embedding model: all-MiniLM-L6-v2 ...")
-model = SentenceTransformer("all-MiniLM-L6-v2")
+print("Loading local embedding model: all-mpnet-base-v2 ...")
+model = SentenceTransformer("all-mpnet-base-v2")
 print("Model loaded successfully.")
 
 # Paths for caching
@@ -46,15 +48,15 @@ def _save_cache(cache: dict):
 # --- Main embedding functions ---
 def get_embedding(text: str) -> List[float]:
     """
-    Get embedding for a single text string using SentenceTransformer.
+    Get normalized embedding for a single text string using SentenceTransformer.
     Cached locally to reduce compute time.
     """
     cache = _load_cache()
     if text in cache:
         return cache[text]
 
-    # Generate local embedding
-    vector = model.encode(text).tolist()
+    # Generate embedding
+    vector = model.encode(text, normalize_embeddings=True).tolist()
 
     # Save to cache
     cache[text] = vector
@@ -62,9 +64,11 @@ def get_embedding(text: str) -> List[float]:
     return vector
 
 
-def embed_dataframe(df: pd.DataFrame, text_column: str = "desc", embed_column: str = "embedding") -> pd.DataFrame:
+def embed_dataframe(
+    df: pd.DataFrame, text_column: str = "desc", embed_column: str = "embedding"
+) -> pd.DataFrame:
     """
-    Generate embeddings for each row of a DataFrame.
+    Generate normalized embeddings for each row of a DataFrame.
     Adds a new column `embed_column` with the embedding vector for each text entry.
     Automatically caches embeddings for repeated runs.
     """
